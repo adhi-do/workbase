@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<div class="card">
+    <h1>Set Campus Location</h1>
+    <p class="muted">The most recently saved location is the one students are checked against.</p>
+    <form method="POST" id="campus-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Campus / Office Name
+            <input type="text" name="name" placeholder="Main Campus">
+        </label>
+        <label>Latitude
+            <input type="number" step="any" name="latitude" id="latitude" required>
+        </label>
+        <label>Longitude
+            <input type="number" step="any" name="longitude" id="longitude" required>
+        </label>
+        <label>Allowed Radius (meters)
+            <input type="number" step="any" name="radius" value="150" min="5" max="5000" required>
+        </label>
+        <button type="button" id="use-current-location">Use My Current Location</button>
+        <button type="submit">Save Campus Location</button>
+    </form>
+    <p id="geo-status" class="muted"></p>
+</div>
+
+<div class="card">
+    <h2>Saved Locations</h2>
+    <table>
+        <thead><tr><th>Name</th><th>Latitude</th><th>Longitude</th><th>Radius (m)</th><th>Created</th><th></th></tr></thead>
+        <tbody>
+        {% for c in campuses %}
+            <tr>
+                <td>{{ c['name'] }}</td>
+                <td>{{ '%.6f' % c['latitude'] }}</td>
+                <td>{{ '%.6f' % c['longitude'] }}</td>
+                <td>{{ c['radius_meters'] }}</td>
+                <td>{{ c['created_at'] }}</td>
+                <td><a href="https://www.google.com/maps?q={{ c['latitude'] }},{{ c['longitude'] }}" target="_blank" rel="noopener">View on map ↗</a></td>
+            </tr>
+        {% else %}
+            <tr><td colspan="6">No campus location set yet.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Today's Attendance Count: {{ today_count }}</h2>
+    <h3>Recent Check-ins</h3>
+    <table>
+        <thead><tr><th>Student</th><th>Time</th><th>Distance (m)</th></tr></thead>
+        <tbody>
+        {% for r in recent %}
+            <tr>
+                <td>{{ r['username'] }}</td>
+                <td>{{ r['marked_at'] }}</td>
+                <td>{{ '%.1f' % r['distance_meters'] }}</td>
+            </tr>
+        {% else %}
+            <tr><td colspan="3">No attendance records yet.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+document.getElementById('use-current-location').addEventListener('click', () => {
+    const status = document.getElementById('geo-status');
+    if (!navigator.geolocation) {
+        status.innerText = 'Geolocation is not supported by this browser.';
+        return;
+    }
+    status.innerText = 'Locating...';
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            document.getElementById('latitude').value = position.coords.latitude;
+            document.getElementById('longitude').value = position.coords.longitude;
+            const acc = Math.round(position.coords.accuracy);
+            let warning = '';
+            if (acc > 100) {
+                warning = ' ⚠️ This accuracy is poor — likely a WiFi/IP-based estimate, ' +
+                          'not real GPS. Try this from a phone outdoors with location ' +
+                          'services (not just WiFi) turned on before saving.';
+            }
+            status.innerText = `Location filled in (accuracy: ±${acc}m).${warning} ` +
+                                'Review and save.';
+        },
+        (error) => {
+            status.innerText = 'Could not get location: ' + error.message;
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+    );
+});
+</script>
+{% endblock %}
+

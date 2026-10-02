@@ -1,0 +1,16 @@
+# Secrets — never commit
+.env
+
+# Database — contains real user data, regenerated automatically on first run
+*.db
+*.sqlite3
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# OS / editor noise
+.DS_Store
+.vscode/

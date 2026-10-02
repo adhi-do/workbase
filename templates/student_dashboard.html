@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Student Dashboard{% endblock %}
+{% block content %}
+<div class="card">
+    <h1>Mark Attendance</h1>
+    {% if not campus %}
+        <p class="flash flash-error">The admin has not set a campus location yet. Please check back later.</p>
+    {% elif marked_today %}
+        <p class="flash flash-success">You have already marked attendance today. Come back tomorrow.</p>
+    {% else %}
+        <p class="muted">Target: {{ campus['name'] }} (allowed radius: {{ campus['radius_meters']|int }}m)</p>
+        <button id="mark-btn">Mark My Presence</button>
+        <p id="status" class="muted"></p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Your Recent Attendance</h2>
+    <table>
+        <thead><tr><th>Date/Time</th><th>Distance (m)</th></tr></thead>
+        <tbody>
+        {% for h in history %}
+            <tr>
+                <td>{{ h['marked_at'] }}</td>
+                <td>{{ '%.1f' % h['distance_meters'] }}</td>
+            </tr>
+        {% else %}
+            <tr><td colspan="2">No attendance marked yet.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if campus and not marked_today %}
+<script>
+const csrfToken = "{{ csrf_token() }}";
+
+document.getElementById('mark-btn').addEventListener('click', () => {
+    const status = document.getElementById('status');
+    const btn = document.getElementById('mark-btn');
+
+    if (!navigator.geolocation) {
+        status.innerText = 'Geolocation is not supported by this browser.';
+        return;
+    }
+
+    btn.disabled = true;
+    status.innerText = 'Getting your location...';
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const acc = Math.round(position.coords.accuracy);
+            status.innerText = `Verifying with server (GPS accuracy: ±${acc}m)...`;
+            fetch('/mark-attendance', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    lat: position.coords.latitude,
+                    lon: position.coords.longitude,
+                    accuracy: acc
+                })
+            })
+            .then(response => response.json().then(data => ({ ok: response.ok, data })))
+            .then(({ ok, data }) => {
+                status.innerText = data.message;
+                if (ok) {
+                    setTimeout(() => window.location.reload(), 1200);
+                } else {
+                    btn.disabled = false;
+                }
+            })
+            .catch(() => {
+                status.innerText = 'Network error. Please try again.';
+                btn.disabled = false;
+            });
+        },
+        (error) => {
+            status.innerText = 'Location access denied or failed: ' + error.message;
+            btn.disabled = false;
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+    );
+});
+</script>
+{% endif %}
+{% endblock %}
