@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Operational Tasks — Workbase{% endblock %}
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <h1 class="page-title">Enterprise Task Allocation</h1>
+        <p class="muted">Operational workflows, duty delegations, and project activity tracking.</p>
+    </div>
+</div>
+
+{% if is_admin %}
+<div class="card mb-4">
+    <div class="card-header-clean">
+        <h2>Assign New Operational Task</h2>
+        <p class="muted small-text">Delegate duties to registered personnel with priority escalation and due dates.</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('tasks.create_task') }}" class="form-stacked">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        
+        <div class="form-row-2">
+            <div class="form-group">
+                <label for="title">Task Title</label>
+                <input type="text" id="title" name="title" placeholder="e.g. Conduct Science Lab Equipment Audit" required>
+            </div>
+            <div class="form-group">
+                <label for="assigned_to">Assignee (Student Personnel)</label>
+                <select id="assigned_to" name="assigned_to">
+                    <option value="">-- Unassigned / Open Pool --</option>
+                    {% for s in students %}
+                        <option value="{{ s['id'] }}">{{ s['username'] }} ({{ s['email'] }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row-2">
+            <div class="form-group">
+                <label for="priority">Priority Level</label>
+                <select id="priority" name="priority">
+                    <option value="low">Low Priority</option>
+                    <option value="medium" selected>Medium Priority</option>
+                    <option value="high">High Priority</option>
+                    <option value="urgent">Urgent Escalation</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="due_date">Target Completion Date</label>
+                <input type="date" id="due_date" name="due_date">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Task Instructions &amp; Deliverables</label>
+            <textarea id="description" name="description" rows="3" placeholder="Provide clear operational requirements and expected outcomes..."></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Create &amp; Allocate Task</button>
+    </form>
+</div>
+{% endif %}
+
+<!-- Tasks List Table -->
+<div class="card">
+    <div class="card-header-clean">
+        <h2>{{ 'Active Institutional Tasks' if is_admin else 'Your Assigned Operational Tasks' }}</h2>
+        <span class="muted small-text">{{ tasks|length }} task(s) in pipeline</span>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Task &amp; Details</th>
+                    {% if is_admin %}<th>Assignee</th>{% endif %}
+                    <th>Priority</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for t in tasks %}
+                <tr>
+                    <td>
+                        <strong class="d-block">{{ t['title'] }}</strong>
+                        {% if t['description'] %}
+                            <span class="small-text muted">{{ t['description'] }}</span>
+                        {% endif %}
+                    </td>
+                    {% if is_admin %}
+                        <td>
+                            {% if t['assignee_name'] %}
+                                <span class="font-weight-medium">{{ t['assignee_name'] }}</span>
+                            {% else %}
+                                <span class="muted font-italic">Unassigned</span>
+                            {% endif %}
+                        </td>
+                    {% endif %}
+                    <td>
+                        <span class="priority-tag priority-{{ t['priority'] }}">{{ t['priority']|capitalize }}</span>
+                    </td>
+                    <td class="small-text muted">
+                        {{ t['due_date'] or 'No deadline' }}
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ 'success' if t['status'] == 'completed' else ('info' if t['status'] == 'in_progress' else 'warning') }}">
+                            {{ t['status']|replace('_', ' ')|capitalize }}
+                        </span>
+                    </td>
+                    <td>
+                        <form method="POST" action="{{ url_for('tasks.update_task_status', task_id=t['id']) }}" class="action-btn-row">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            {% if t['status'] == 'todo' %}
+                                <input type="hidden" name="status" value="in_progress">
+                                <button type="submit" class="btn btn-secondary btn-xs">Start Task</button>
+                            {% elif t['status'] == 'in_progress' %}
+                                <input type="hidden" name="status" value="completed">
+                                <button type="submit" class="btn btn-success btn-xs">Mark Completed</button>
+                            {% else %}
+                                <input type="hidden" name="status" value="in_progress">
+                                <button type="submit" class="btn btn-secondary btn-xs">Reopen</button>
+                            {% endif %}
+                        </form>
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="{{ 6 if is_admin else 5 }}" class="text-center muted py-4">No operational tasks currently on record.</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

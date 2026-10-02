@@ -1,87 +1,265 @@
 {% extends "base.html" %}
-{% block title %}Student Dashboard{% endblock %}
+{% block title %}Student Dashboard — Workbase{% endblock %}
 {% block content %}
-<div class="card">
-    <h1>Mark Attendance</h1>
-    {% if not campus %}
-        <p class="flash flash-error">The admin has not set a campus location yet. Please check back later.</p>
+<div class="dashboard-header">
+    <div>
+        <h1 class="page-title">Student Operations Portal</h1>
+        <p class="muted">Monitor your attendance verification, assigned operational tasks, and issue tickets.</p>
+    </div>
+    <div class="header-action">
+        <a href="{{ url_for('tickets.student_tickets') }}" class="btn btn-secondary btn-sm">Report Location Issue</a>
+    </div>
+</div>
+
+<!-- Attendance Analytics Card -->
+<div class="card metrics-card">
+    <div class="metrics-grid">
+        <div class="metric-item">
+            <span class="metric-label">Attendance Percentage</span>
+            <div class="metric-value-row">
+                <span class="metric-value">{{ stats.percentage }}%</span>
+                {% if stats.is_defaulter %}
+                    <span class="badge badge-danger">⚠️ Below 70% Alert</span>
+                {% else %}
+                    <span class="badge badge-success">✓ Good Standing (≥ 70%)</span>
+                {% endif %}
+            </div>
+            <div class="progress-bar-wrap" title="{{ stats.percentage }}%">
+                <div class="progress-bar {% if stats.is_defaulter %}bar-danger{% else %}bar-success{% endif %}" style="width: {{ stats.percentage }}%;"></div>
+                <div class="threshold-marker" style="left: 70%;" title="70% Required Threshold"></div>
+            </div>
+            <span class="metric-subtext">70% mandatory threshold required for institutional compliance</span>
+        </div>
+
+        <div class="metric-item">
+            <span class="metric-label">Institutional Records</span>
+            <span class="metric-value">{{ stats.attended_days }} <span class="metric-unit">/ {{ stats.total_days }} Days</span></span>
+            <span class="metric-subtext">Total active check-in dates recorded across campus</span>
+        </div>
+
+        <div class="metric-item">
+            <span class="metric-label">Today's Status</span>
+            {% if marked_today %}
+                <span class="metric-status-badge status-present">✓ Present Today</span>
+                <span class="metric-subtext">Verified attendance recorded</span>
+            {% else %}
+                <span class="metric-status-badge status-pending">● Awaiting Check-In</span>
+                <span class="metric-subtext">Presence verification pending</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Primary Action: Mark Attendance -->
+<div class="card action-card">
+    <div class="card-header-clean">
+        <h2>📍 Geofenced Attendance Verification</h2>
+    </div>
+
+    {% if not campuses %}
+        <div class="alert-box alert-warning">
+            <strong>No Campus Pin Defined:</strong> The institution administrator has not established an active campus boundary yet. Please check back later.
+        </div>
     {% elif marked_today %}
-        <p class="flash flash-success">You have already marked attendance today. Come back tomorrow.</p>
+        <div class="alert-box alert-success">
+            <strong>Attendance Recorded:</strong> Your presence has been verified for today. Next check-in window opens tomorrow.
+        </div>
     {% else %}
-        <p class="muted">Target: {{ campus['name'] }} (allowed radius: {{ campus['radius_meters']|int }}m)</p>
-        <button id="mark-btn">Mark My Presence</button>
-        <p id="status" class="muted"></p>
+        <p class="muted">
+            Click below to verify your GPS coordinates against designated campus boundary radii. High-accuracy location services must be enabled.
+        </p>
+
+        <div class="attendance-action-row">
+            <button id="mark-btn" class="btn btn-primary btn-lg">
+                <span class="btn-icon">📍</span> Mark My Presence
+            </button>
+            <div id="status-container" class="status-box">
+                <p id="status" class="muted">Ready to capture location.</p>
+                <div id="ticket-prompt" class="ticket-prompt hidden">
+                    <p class="small-text">Experiencing GPS drift, indoor signal blockage, or device inaccuracies?</p>
+                    <a id="ticket-link" href="{{ url_for('tickets.student_tickets') }}" class="btn btn-danger btn-sm">
+                        File Attendance Issue Ticket ↗
+                    </a>
+                </div>
+            </div>
+        </div>
     {% endif %}
 </div>
 
-<div class="card">
-    <h2>Your Recent Attendance</h2>
-    <table>
-        <thead><tr><th>Date/Time</th><th>Distance (m)</th></tr></thead>
-        <tbody>
-        {% for h in history %}
-            <tr>
-                <td>{{ h['marked_at'] }}</td>
-                <td>{{ '%.1f' % h['distance_meters'] }}</td>
-            </tr>
-        {% else %}
-            <tr><td colspan="2">No attendance marked yet.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<!-- Two-Column Layout: History & Tasks -->
+<div class="grid-two-col">
+    <!-- Recent Attendance Log -->
+    <div class="card">
+        <div class="card-header-clean">
+            <h2>Recent Check-Ins</h2>
+            <span class="muted small-text">Last 15 records</span>
+        </div>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date &amp; Time</th>
+                        <th>Campus Pin</th>
+                        <th>Distance</th>
+                        <th>Method</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for h in history %}
+                    <tr>
+                        <td>{{ h['marked_at'] }}</td>
+                        <td>{{ h['campus_name'] or 'Campus Pin' }}</td>
+                        <td>{{ '%.1f' % h['distance_meters'] }} m</td>
+                        <td>
+                            {% if h['method'] == 'ticket_approval' %}
+                                <span class="badge badge-info">Dispute Approved</span>
+                            {% else %}
+                                <span class="badge badge-neutral">GPS Verified</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center muted py-3">No attendance check-ins logged yet.</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Active Operational Tasks -->
+    <div class="card">
+        <div class="card-header-clean">
+            <h2>Assigned Tasks</h2>
+            <a href="{{ url_for('tasks.index') }}" class="small-link">View all ↗</a>
+        </div>
+        <div class="task-list-compact">
+            {% for t in tasks %}
+                <div class="task-item-compact">
+                    <div class="task-info">
+                        <strong>{{ t['title'] }}</strong>
+                        <div class="task-meta">
+                            <span class="priority-tag priority-{{ t['priority'] }}">{{ t['priority']|capitalize }}</span>
+                            {% if t['due_date'] %}<span class="muted">Due {{ t['due_date'] }}</span>{% endif %}
+                        </div>
+                    </div>
+                    <form method="POST" action="{{ url_for('tasks.update_task_status', task_id=t['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {% if t['status'] == 'todo' %}
+                            <input type="hidden" name="status" value="in_progress">
+                            <button type="submit" class="btn btn-secondary btn-xs">Start</button>
+                        {% elif t['status'] == 'in_progress' %}
+                            <input type="hidden" name="status" value="completed">
+                            <button type="submit" class="btn btn-success btn-xs">Complete</button>
+                        {% else %}
+                            <span class="badge badge-success">Done</span>
+                        {% endif %}
+                    </form>
+                </div>
+            {% else %}
+                <p class="muted py-2">No pending tasks currently assigned.</p>
+            {% endfor %}
+        </div>
+
+        <div class="recent-tickets-box">
+            <h3>Recent Issue Tickets</h3>
+            {% for ticket in tickets %}
+                <div class="ticket-mini-row">
+                    <span class="ticket-date">{{ ticket['ticket_date'] }}</span>
+                    <span class="ticket-type">{{ ticket['issue_type']|replace('_', ' ')|capitalize }}</span>
+                    <span class="badge badge-{{ 'success' if ticket['status'] == 'approved' else ('danger' if ticket['status'] == 'rejected' else 'warning') }}">
+                        {{ ticket['status']|capitalize }}
+                    </span>
+                </div>
+            {% else %}
+                <p class="muted small-text">No dispute tickets filed.</p>
+            {% endfor %}
+        </div>
+    </div>
 </div>
 
-{% if campus and not marked_today %}
+{% if campuses and not marked_today %}
 <script>
 const csrfToken = "{{ csrf_token() }}";
+const markBtn = document.getElementById('mark-btn');
+const statusElem = document.getElementById('status');
+const ticketPrompt = document.getElementById('ticket-prompt');
+const ticketLink = document.getElementById('ticket-link');
 
-document.getElementById('mark-btn').addEventListener('click', () => {
-    const status = document.getElementById('status');
-    const btn = document.getElementById('mark-btn');
-
+markBtn.addEventListener('click', () => {
     if (!navigator.geolocation) {
-        status.innerText = 'Geolocation is not supported by this browser.';
+        statusElem.innerText = 'Geolocation is not supported by your browser.';
+        ticketPrompt.classList.remove('hidden');
         return;
     }
 
-    btn.disabled = true;
-    status.innerText = 'Getting your location...';
+    markBtn.disabled = true;
+    statusElem.innerHTML = '<span class="spinner"></span> Acquiring high-precision satellite GPS fix...';
+    ticketPrompt.classList.add('hidden');
 
     navigator.geolocation.getCurrentPosition(
         (position) => {
-            const acc = Math.round(position.coords.accuracy);
-            status.innerText = `Verifying with server (GPS accuracy: ±${acc}m)...`;
-            fetch('/mark-attendance', {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            const acc = Math.round(position.coords.accuracy || 0);
+
+            statusElem.innerText = `Verifying position with Workbase server (GPS accuracy: ±${acc}m)...`;
+
+            fetch("{{ url_for('attendance.mark_attendance') }}", {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': csrfToken
                 },
                 body: JSON.stringify({
-                    lat: position.coords.latitude,
-                    lon: position.coords.longitude,
+                    lat: lat,
+                    lon: lon,
                     accuracy: acc
                 })
             })
-            .then(response => response.json().then(data => ({ ok: response.ok, data })))
-            .then(({ ok, data }) => {
-                status.innerText = data.message;
+            .then(res => res.json().then(data => ({ ok: res.ok, status: res.status, data })))
+            .then(({ ok, status, data }) => {
+                statusElem.innerText = data.message;
                 if (ok) {
+                    statusElem.className = 'text-success font-weight-bold';
                     setTimeout(() => window.location.reload(), 1200);
                 } else {
-                    btn.disabled = false;
+                    markBtn.disabled = false;
+                    statusElem.className = 'text-danger';
+                    if (data.can_ticket) {
+                        ticketPrompt.classList.remove('hidden');
+                        const params = new URLSearchParams({
+                            campus_id: data.nearest_campus_id || '',
+                            lat: lat,
+                            lon: lon,
+                            acc: acc,
+                            notes: `Automated capture: Failed radius check at ${data.nearest_campus} (Distance: ${data.distance}m, Accuracy: ±${acc}m)`
+                        });
+                        ticketLink.href = `{{ url_for('tickets.student_tickets') }}?${params.toString()}`;
+                    }
                 }
             })
             .catch(() => {
-                status.innerText = 'Network error. Please try again.';
-                btn.disabled = false;
+                statusElem.innerText = 'Network communication failure. Please verify connection and retry.';
+                statusElem.className = 'text-danger';
+                markBtn.disabled = false;
+                ticketPrompt.classList.remove('hidden');
             });
         },
         (error) => {
-            status.innerText = 'Location access denied or failed: ' + error.message;
-            btn.disabled = false;
+            let msg = 'Could not acquire GPS coordinates: ' + error.message;
+            if (error.code === error.PERMISSION_DENIED) {
+                msg = 'Location permission was denied. Please grant location access in browser settings.';
+            } else if (error.code === error.TIMEOUT) {
+                msg = 'Location request timed out. Please step outdoors or check device location toggles.';
+            }
+            statusElem.innerText = msg;
+            statusElem.className = 'text-danger';
+            markBtn.disabled = false;
+            ticketPrompt.classList.remove('hidden');
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     );
 });
 </script>

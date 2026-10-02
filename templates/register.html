@@ -1,21 +1,34 @@
 {% extends "base.html" %}
-{% block title %}Register{% endblock %}
+{% block title %}Student Registration — Workbase{% endblock %}
 {% block content %}
-<div class="card">
-    <h1>Create Student Account</h1>
-    <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Username
-            <input type="text" name="username" pattern="[a-zA-Z0-9_]{3,30}" required autofocus>
-        </label>
-        <label>Email
-            <input type="email" name="email" required>
-        </label>
-        <label>Password
-            <input type="password" name="password" minlength="8" required>
-        </label>
-        <button type="submit">Register</button>
-    </form>
-    <p class="muted">Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
+<div class="auth-wrapper">
+    <div class="card auth-card">
+        <div class="auth-header">
+            <span class="auth-logo">⬢</span>
+            <h1>Register Student Account</h1>
+            <p class="muted">Join Workbase to mark presence, file dispute tickets, and view assignments.</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('auth.register') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" pattern="[a-zA-Z0-9_]{3,30}" placeholder="3-30 letters, numbers, or underscore" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="email">Institutional Email</label>
+                <input type="email" id="email" name="email" placeholder="student@institution.edu" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" minlength="8" placeholder="Minimum 8 characters" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Create Student Account</button>
+        </form>
+
+        <div class="auth-footer">
+            <p class="muted">Already have an account? <a href="{{ url_for('auth.login') }}">Log in here</a></p>
+        </div>
+    </div>
 </div>
 {% endblock %}

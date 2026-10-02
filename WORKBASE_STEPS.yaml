@@ -1,0 +1,172 @@
+# ==============================================================================
+# WORKBASE: STEP-BY-STEP TECHNICAL STUDY GUIDE (YAML)
+# Unified Digital Operations Platform — GPS Geofence Verification & Management
+# Zero Framework Frontend: 100% Free of React, Tailwind, and Java.
+# ==============================================================================
+
+project_overview:
+  name: "Workbase"
+  tagline: "Unified digital operations platform with anti-proxy GPS verification"
+  core_purpose: "Eliminate proxy attendance via server-side GPS math while providing an expandable foundation for enterprise task allocation and institutional resource tracking."
+  tech_stack:
+    backend: "Python 3 (Flask 3.0.3, Werkzeug, Gunicorn)"
+    database: "SQLite 3 with Foreign Key Enforcement & Performance Indexes"
+    security: "PBKDF2-HMAC-SHA256 (260k rounds), Flask-WTF CSRF Protection, HTTPOnly/SameSite Lax Cookies"
+    frontend: "Semantic HTML5, Modern Vanilla CSS (CSS Variables), Vanilla JavaScript (Fetch API)"
+    framework_guarantee: "Strictly 0% React, 0% Tailwind, 0% Java. Zero node_modules or bloated build steps."
+
+quick_start_credentials:
+  admin_console:
+    username: "admin"
+    password: "adminpassword123"
+    role: "admin"
+    login_url: "http://127.0.0.1:5000/login"
+    dashboard_url: "http://127.0.0.1:5000/admin"
+    capabilities:
+      - "Manage and toggle campus geofence boundary pins"
+      - "Audit real-time student check-in logs"
+      - "Filter defaulters falling below 70% attendance"
+      - "Export defaulter lists and complete audit logs to CSV"
+      - "Review and approve GPS error/dispute tickets"
+      - "Assign operational tasks and catalog institutional resources"
+  demo_student:
+    username: "student_demo"
+    password: "studentpassword123"
+    role: "student"
+    login_url: "http://127.0.0.1:5000/login"
+    dashboard_url: "http://127.0.0.1:5000/dashboard"
+    capabilities:
+      - "Verify physical presence against campus boundary via GPS"
+      - "Monitor personal attendance percentage and 70% compliance bar"
+      - "File issue tickets for GPS drift or indoor signal failure"
+      - "View and update assigned operational tasks"
+      - "Reserve institutional facilities or equipment"
+
+# ==============================================================================
+# HOW A REQUEST FLOWS THROUGH WORKBASE (THE BIG PICTURE)
+# ==============================================================================
+request_lifecycle:
+  step_1_browser_action:
+    action: "User submits an HTML form (login/ticket) or clicks 'Mark My Presence' (GPS)."
+    details: "For GPS, browser captures navigator.geolocation coordinates (lat, lon, accuracy) and sends a JSON POST request with CSRF token."
+  step_2_security_gateway:
+    file: "app.py"
+    action: "Flask-WTF validates the CSRF token. Security headers are appended (nosniff, SAMEORIGIN, strict-origin)."
+  step_3_modular_blueprint:
+    folder: "blueprints/"
+    action: "Flask dispatches the request to the dedicated domain blueprint (auth, attendance, admin, tickets, tasks, or resources)."
+  step_4_business_logic:
+    files: ["auth.py", "geo.py", "database.py"]
+    action: "View function executes business rules (hashes passwords, calculates Haversine distances, or aggregates attendance compliance)."
+  step_5_database_execution:
+    file: "database.py -> attendance.db"
+    action: "SQLite executes parameterized SQL queries ('?'), enforcing foreign keys and unique daily constraints."
+  step_6_response_rendered:
+    templates: "templates/*.html"
+    action: "Flask renders clean semantic HTML with flashed alerts or returns structured JSON back to browser."
+
+# ==============================================================================
+# STEP-BY-STEP IMPORTANT CONCEPTS TO STUDY
+# ==============================================================================
+study_steps:
+
+  step_1_database_architecture:
+    file: "database.py"
+    concept: "Persistent relational storage with zero-config SQLite"
+    key_points:
+      - point: "Why SQLite? A single file ('attendance.db') requires zero database server installation, making local setup and small-to-medium enterprise operations instant."
+      - point: "Foreign Keys Enabled: SQLite disables foreign keys by default. 'conn.execute(\"PRAGMA foreign_keys = ON\")' forces SQLite to reject orphaned records."
+      - point: "Dictionary Rows: 'conn.row_factory = sqlite3.Row' allows column access by name ('row[\"username\"]') instead of numerical indexes."
+      - point: "Unique Daily Constraint: 'UNIQUE(user_id, marked_date)' in the attendance table makes duplicate check-ins physically impossible at the database level."
+      - point: "Performance Indexes: Added indexes on '(user_id, marked_date)', 'marked_date', and 'issue_tickets(status)' so attendance queries run in O(1) time instead of scanning every table row."
+
+  step_2_password_security_and_cryptography:
+    file: "auth.py"
+    concept: "Protecting accounts against database breaches"
+    key_points:
+      - point: "Never Store Plaintext: Storing raw passwords hands over all accounts if the database file is ever exposed."
+      - point: "Cryptographic Salt: 'secrets.token_hex(16)' generates a unique random string per user. Mixed into the hash, it prevents precomputed rainbow table attacks."
+      - point: "PBKDF2-HMAC-SHA256: 260,000 hashing rounds deliberately consume a few milliseconds per login. While imperceptible to users, it slows down brute-force attackers by 260,000x."
+      - point: "Constant-Time Comparison: 'hmac.compare_digest(computed, expected)' compares strings in constant time, preventing timing attacks where attackers guess characters by measuring response times."
+
+  step_3_role_based_access_control_rbac:
+    file: "auth.py"
+    concept: "Restricting routes by user privilege"
+    key_points:
+      - point: "Cryptographic Sessions: Flask signs session cookies with SECRET_KEY. Users cannot tamper with their 'user_id' or 'role' without invalidating the cryptographic signature."
+      - point: "Login Guard (@login_required): Checks 'user_id in session'. If absent, redirects with a flash alert to '/login'."
+      - point: "Admin Guard (@admin_required): Checks 'session.get(\"role\") == \"admin\"'. If a logged-in student visits an admin URL, the server aborts with '403 Forbidden' (an explicit denial)."
+      - point: "Privilege Escalation Block: The public registration route (/register) hardcodes role='student'. Administrators can only be provisioned via the command-line utility ('create_admin.py')."
+
+  step_4_geofencing_and_haversine_formula:
+    file: "geo.py"
+    concept: "Calculating true physical distance on a curved planet"
+    key_points:
+      - point: "Why Not Euclidean Math? Standard Pythagorean distance ('sqrt(x^2 + y^2)') treats Earth as a flat grid, resulting in severe distance distortion across latitudes."
+      - point: "Haversine Equation: Calculates great-circle spherical distance using Earth's mean radius (6,371,000 meters)."
+      - point: "Nearest Campus Resolution: 'find_nearest_campus()' iterates over all active campus pins and selects the one with the smallest distance, allowing students to check in at any valid branch."
+      - point: "Accuracy Jitter Forgiveness: Real GPS signals fluctuate naturally by a few meters even while standing still. Workbase forgives up to 50m of accuracy jitter ('min(accuracy, 50)')."
+      - point: "Anti-Spoofing Ceiling: If device reports accuracy > 300m (typical of coarse WiFi/IP geolocation) and is outside the radius, check-in is rejected to prevent proxy attendance from distant locations."
+
+  step_5_defaulters_calculation_below_70_percent:
+    file: "blueprints/admin.py and database.py"
+    concept: "Institutional compliance monitoring"
+    formula: "attendance_percentage = (student_attended_days / total_system_active_days) * 100"
+    key_points:
+      - point: "System Active Days: Calculated from 'COUNT(DISTINCT marked_date) FROM attendance'. Represents actual operational tracking dates."
+      - point: "Defaulter Flag: If percentage < 70.0%, 'is_defaulter = True'. Highlighted with red warning badges across student and admin consoles."
+      - point: "Client-Side Instant Filter: Admin dashboard includes JavaScript buttons ('All', 'Defaulters <70%', 'Compliant') that instantly filter table rows without re-querying the server."
+      - point: "CSV Export: Python's standard 'csv' library streams 'workbase_defaulters_below_70.csv' directly to the administrator's downloads folder."
+
+  step_6_built_in_issue_ticketing:
+    file: "blueprints/tickets.py"
+    concept: "Handling real-world GPS failure edge cases"
+    key_points:
+      - point: "Why Needed? Reinforced concrete classrooms, basements, or temporary satellite signal degradation can block legitimate check-ins."
+      - point: "Smart Redirect: When a check-in fails, the student portal offers an automated 'File Attendance Issue Ticket' link that pre-fills campus name, distance, and coordinates."
+      - point: "Admin Resolution: Admins can review student explanations and view reported coordinates on Google Maps."
+      - point: "Automatic Attendance Credit: If an admin selects 'Approve & Credit', Workbase creates an attendance entry under the 'ticket_approval' ledger for that date, restoring compliance."
+
+  step_7_extensible_foundation_modules:
+    files: ["blueprints/tasks.py", "blueprints/resources.py"]
+    concept: "Expanding beyond attendance into digital operations"
+    key_points:
+      - point: "Task Delegation: Admins create operational assignments with priority ('low', 'medium', 'high', 'urgent') and deadlines. Students update statuses ('todo' -> 'in_progress' -> 'completed')."
+      - point: "Resource Cataloging: Tracks facilities, laboratories, and physical assets. Users book specific time windows, transitioning asset status from 'available' to 'in_use'."
+
+# ==============================================================================
+# REPOSITORY FILE DIRECTORY MAP
+# ==============================================================================
+repository_map:
+  app.py: "Application factory; registers blueprints, configures sessions, CSRF, and security headers."
+  auth.py: "PBKDF2 cryptographic password hashing and role-based decorators (@login_required, @admin_required)."
+  create_admin.py: "CLI tool for provisioning administrator accounts (interactive or flag-based)."
+  database.py: "SQLite connection manager, table schemas, migrations, and statistical aggregation queries."
+  geo.py: "Haversine distance formula, coordinate boundary checks, and nearest campus locator."
+  Procfile: "Production WSGI server declaration ('web: gunicorn app:app')."
+  requirements.txt: "Production Python dependencies (Flask, Flask-WTF, python-dotenv, gunicorn)."
+  .env: "Local environment file containing SECRET_KEY and FLASK_ENV."
+  blueprints/auth.py: "HTTP routes for student registration, login, and session logout."
+  blueprints/attendance.py: "HTTP routes for student dashboard and GPS check-in verification."
+  blueprints/admin.py: "HTTP routes for admin console, campus pin management, and <70% defaulter exports."
+  blueprints/tickets.py: "HTTP routes for dispute filing, ticket management, and attendance crediting."
+  blueprints/tasks.py: "HTTP routes for operational task allocation and status updates."
+  blueprints/resources.py: "HTTP routes for institutional facility/asset tracking and reservations."
+  static/style.css: "Pure modern CSS styling; responsive grid, badges, progress bars, zero frameworks."
+  templates/base.html: "Master HTML layout with dynamic role-based navigation and alert message stack."
+  templates/admin_dashboard.html: "Admin console with campus pins, real-time log, and <70% defaulter filter."
+  templates/student_dashboard.html: "Student portal with GPS check-in button and 70% threshold compliance bar."
+  templates/tickets.html: "Student error reporting form and ticket history table."
+  templates/admin_tickets.html: "Administrative dispute audit console with inline approve/reject buttons."
+  templates/tasks.html: "Operational duty delegation and task pipeline table."
+  templates/resources.html: "Campus asset inventory and reservation schedule."
+  tests/test_workbase.py: "Complete automated test suite containing 21 unit and integration tests."
+
+# ==============================================================================
+# HOW TO RUN AND VERIFY EVERYTHING
+# ==============================================================================
+commands_reference:
+  run_dev_server: "./venv/bin/python app.py"
+  run_all_tests: "./venv/bin/python -m unittest discover -s tests"
+  create_new_admin: "./venv/bin/python create_admin.py --username <user> --email <email> --password <pass>"
+  production_start: "./venv/bin/gunicorn app:app"

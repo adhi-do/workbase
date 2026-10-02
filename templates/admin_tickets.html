@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Issue Ticket Resolution — Workbase{% endblock %}
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <h1 class="page-title">Attendance Dispute &amp; Error Tickets</h1>
+        <p class="muted">Review student GPS failures, indoor drift disputes, and grant retroactive attendance credit.</p>
+    </div>
+    <div class="header-action">
+        <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-secondary btn-sm">← Executive Console</a>
+    </div>
+</div>
+
+<!-- Filter Tabs -->
+<div class="filter-btn-group mb-3">
+    <a href="{{ url_for('tickets.admin_tickets', status='all') }}" class="btn btn-filter {{ 'active' if status_filter == 'all' else '' }}">
+        All Tickets ({{ counts.all }})
+    </a>
+    <a href="{{ url_for('tickets.admin_tickets', status='pending') }}" class="btn btn-filter btn-filter-warning {{ 'active' if status_filter == 'pending' else '' }}">
+        Pending Audit ({{ counts.pending }})
+    </a>
+    <a href="{{ url_for('tickets.admin_tickets', status='approved') }}" class="btn btn-filter {{ 'active' if status_filter == 'approved' else '' }}">
+        Approved ({{ counts.approved }})
+    </a>
+    <a href="{{ url_for('tickets.admin_tickets', status='rejected') }}" class="btn btn-filter {{ 'active' if status_filter == 'rejected' else '' }}">
+        Rejected ({{ counts.rejected }})
+    </a>
+</div>
+
+<!-- Tickets Table -->
+<div class="card">
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Ticket</th>
+                    <th>Student Info</th>
+                    <th>Issue Details</th>
+                    <th>Reported Coordinates</th>
+                    <th>Current Status</th>
+                    <th>Administrative Action</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for t in tickets %}
+                <tr>
+                    <td>
+                        <strong>#{{ t['id'] }}</strong>
+                        <span class="muted small-text d-block">{{ t['ticket_date'] }}</span>
+                    </td>
+                    <td>
+                        <strong class="d-block">{{ t['username'] }}</strong>
+                        <span class="muted small-text">{{ t['email'] }}</span>
+                        {% if t['campus_name'] %}
+                            <span class="badge badge-neutral mt-1">Campus: {{ t['campus_name'] }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="max-width: 280px;">
+                        <span class="badge badge-warning mb-1">{{ valid_issue_types.get(t['issue_type'], t['issue_type']) }}</span>
+                        <p class="small-text my-1">{{ t['description'] }}</p>
+                        {% if t['admin_notes'] %}
+                            <div class="admin-note-box">
+                                <strong>Admin Note:</strong> {{ t['admin_notes'] }}
+                                {% if t['resolver_name'] %}<span class="muted small-text">— {{ t['resolver_name'] }}</span>{% endif %}
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td class="small-text">
+                        {% if t['reported_latitude'] and t['reported_longitude'] %}
+                            <div>{{ '%.4f' % t['reported_latitude'] }}, {{ '%.4f' % t['reported_longitude'] }}</div>
+                            {% if t['reported_accuracy'] %}
+                                <span class="muted">(±{{ t['reported_accuracy']|int }}m)</span>
+                            {% endif %}
+                            <div>
+                                <a href="https://www.google.com/maps?q={{ t['reported_latitude'] }},{{ t['reported_longitude'] }}" target="_blank" rel="noopener" class="small-link">
+                                    View on Map ↗
+                                </a>
+                            </div>
+                        {% else %}
+                            <span class="muted font-italic">No coordinates recorded</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ 'success' if t['status'] == 'approved' else ('danger' if t['status'] == 'rejected' else ('info' if t['status'] == 'resolved' else 'warning')) }}">
+                            {{ t['status']|capitalize }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if t['status'] == 'pending' %}
+                            <form method="POST" action="{{ url_for('tickets.update_ticket_status', ticket_id=t['id']) }}" class="ticket-action-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="text" name="admin_notes" placeholder="Resolution note / reasoning..." class="input-sm mb-1" required>
+                                <div class="action-btn-row">
+                                    <button type="submit" name="action" value="approve" class="btn btn-success btn-xs" title="Approve and record attendance credit">
+                                        ✓ Approve &amp; Credit
+                                    </button>
+                                    <button type="submit" name="action" value="reject" class="btn btn-danger btn-xs" title="Reject dispute">
+                                        ✕ Reject
+                                    </button>
+                                </div>
+                            </form>
+                        {% else %}
+                            <form method="POST" action="{{ url_for('tickets.update_ticket_status', ticket_id=t['id']) }}" class="ticket-action-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="text" name="admin_notes" placeholder="Update resolution notes..." class="input-sm mb-1">
+                                <div class="action-btn-row">
+                                    {% if t['status'] != 'approved' %}
+                                        <button type="submit" name="action" value="approve" class="btn btn-success btn-xs">
+                                            Re-evaluate &amp; Approve
+                                        </button>
+                                    {% endif %}
+                                    {% if t['status'] != 'rejected' %}
+                                        <button type="submit" name="action" value="reject" class="btn btn-danger btn-xs">
+                                            Re-evaluate &amp; Reject
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="6" class="text-center muted py-4">No dispute tickets found for the selected filter.</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

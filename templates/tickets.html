@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Attendance Dispute &amp; Issue Tickets — Workbase{% endblock %}
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <h1 class="page-title">Attendance Dispute &amp; Error Reporting</h1>
+        <p class="muted">File an administrative ticket for failed GPS captures, indoor signal attenuation, or sensor drift.</p>
+    </div>
+    <div class="header-action">
+        <a href="{{ url_for('attendance.student_dashboard') }}" class="btn btn-secondary btn-sm">← Back to Dashboard</a>
+    </div>
+</div>
+
+<div class="grid-two-col mb-4">
+    <!-- Submit Dispute Form -->
+    <div class="card">
+        <div class="card-header-clean">
+            <h2>File a Dispute Ticket</h2>
+            <p class="muted small-text">Administrative personnel audit every submission and can credit attendance retroactively.</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('tickets.student_tickets') }}" id="ticket-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="reported_lat" id="reported_lat">
+            <input type="hidden" name="reported_lon" id="reported_lon">
+            <input type="hidden" name="reported_accuracy" id="reported_accuracy">
+
+            <div class="form-group">
+                <label for="issue_type">Issue Category</label>
+                <select name="issue_type" id="issue_type" required>
+                    {% for key, label in valid_issue_types.items() %}
+                        <option value="{{ key }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="campus_id">Designated Campus Pin</label>
+                <select name="campus_id" id="campus_id">
+                    <option value="">-- Select Relevant Campus (Optional) --</option>
+                    {% for c in campuses %}
+                        <option value="{{ c['id'] }}">{{ c['name'] }} (Radius: {{ c['radius_meters']|int }}m)</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="description">Explanation &amp; Classroom Details</label>
+                <textarea name="description" id="description" rows="4" placeholder="Detail your exact location (e.g. 3rd Floor Lecture Hall 302) and describe what happened during GPS check-in..." required></textarea>
+                <span class="field-hint">Be specific. State your room number or physical location on campus.</span>
+            </div>
+
+            <div class="gps-attach-box">
+                <div class="d-flex-between">
+                    <span class="small-text font-weight-medium">Optional Coordinate Evidence:</span>
+                    <button type="button" id="attach-gps-btn" class="btn btn-secondary btn-xs">📡 Attach GPS Coordinates</button>
+                </div>
+                <p id="gps-status-text" class="small-text muted mt-1">No coordinates currently attached.</p>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block mt-3">Submit Dispute Ticket</button>
+        </form>
+    </div>
+
+    <!-- Ticket Instructions & Operational Protocol -->
+    <div class="card">
+        <div class="card-header-clean">
+            <h2>Dispute Guidelines</h2>
+        </div>
+        <div class="guidelines-content">
+            <div class="guideline-item">
+                <span class="guideline-icon">🛰️</span>
+                <div>
+                    <strong>Indoor Attenuation:</strong>
+                    <p class="muted small-text">Reinforced concrete, basements, and multi-story structures frequently degrade satellite accuracy beyond the 50m forgiveness ceiling. Always attempt check-in near windows or entrance points before filing.</p>
+                </div>
+            </div>
+            <div class="guideline-item">
+                <span class="guideline-icon">⚖️</span>
+                <div>
+                    <strong>Administrative Audit:</strong>
+                    <p class="muted small-text">Approved tickets automatically record verified presence for the requested calendar date under the "Dispute Approved" ledger without penalizing your compliance rate.</p>
+                </div>
+            </div>
+            <div class="guideline-item">
+                <span class="guideline-icon">⏱️</span>
+                <div>
+                    <strong>Submission Window:</strong>
+                    <p class="muted small-text">Tickets must be submitted on the day the attendance verification failure occurred to ensure timely auditing.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- My Ticket History Table -->
+<div class="card">
+    <div class="card-header-clean">
+        <h2>Your Submitted Dispute Tickets</h2>
+        <span class="muted small-text">{{ tickets|length }} total ticket(s)</span>
+    </div>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Ticket #</th>
+                    <th>Date</th>
+                    <th>Issue Category</th>
+                    <th>Campus</th>
+                    <th>Details</th>
+                    <th>Status</th>
+                    <th>Admin Response</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for t in tickets %}
+                <tr>
+                    <td>#{{ t['id'] }}</td>
+                    <td>{{ t['ticket_date'] }}</td>
+                    <td class="font-weight-medium">{{ valid_issue_types.get(t['issue_type'], t['issue_type']) }}</td>
+                    <td>{{ t['campus_name'] or 'N/A' }}</td>
+                    <td class="small-text" style="max-width: 260px;">{{ t['description'] }}</td>
+                    <td>
+                        <span class="badge badge-{{ 'success' if t['status'] == 'approved' else ('danger' if t['status'] == 'rejected' else ('info' if t['status'] == 'resolved' else 'warning')) }}">
+                            {{ t['status']|capitalize }}
+                        </span>
+                    </td>
+                    <td class="small-text muted">
+                        {% if t['admin_notes'] %}
+                            {{ t['admin_notes'] }}
+                            {% if t['resolver_name'] %}<span class="d-block small-text font-italic">Reviewed by {{ t['resolver_name'] }}</span>{% endif %}
+                        {% else %}
+                            <span class="font-italic">Pending administrative review</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="7" class="text-center muted py-4">You have not submitted any dispute tickets.</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// Auto-fill from query params if redirected from failed attendance check-in
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.has('campus_id')) {
+    const cid = urlParams.get('campus_id');
+    const select = document.getElementById('campus_id');
+    if (select) select.value = cid;
+}
+if (urlParams.has('lat') && urlParams.has('lon')) {
+    document.getElementById('reported_lat').value = urlParams.get('lat');
+    document.getElementById('reported_lon').value = urlParams.get('lon');
+    const acc = urlParams.get('acc') || '';
+    document.getElementById('reported_accuracy').value = acc;
+    document.getElementById('gps-status-text').innerHTML =
+        `✓ Coordinates attached: <strong>${parseFloat(urlParams.get('lat')).toFixed(4)}, ${parseFloat(urlParams.get('lon')).toFixed(4)}</strong> (±${acc}m)`;
+}
+if (urlParams.has('notes')) {
+    document.getElementById('description').value = urlParams.get('notes') + '\n\n';
+}
+
+// Manual GPS Coordinate Attachment Button
+document.getElementById('attach-gps-btn').addEventListener('click', () => {
+    const statusText = document.getElementById('gps-status-text');
+    if (!navigator.geolocation) {
+        statusText.innerText = 'Geolocation is unsupported by your browser.';
+        return;
+    }
+    statusText.innerText = 'Capturing current sensor coordinates...';
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            document.getElementById('reported_lat').value = pos.coords.latitude;
+            document.getElementById('reported_lon').value = pos.coords.longitude;
+            const acc = Math.round(pos.coords.accuracy || 0);
+            document.getElementById('reported_accuracy').value = acc;
+            statusText.innerHTML = `✓ Coordinates attached: <strong>${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}</strong> (±${acc}m)`;
+        },
+        (err) => {
+            statusText.innerText = 'Could not capture location: ' + err.message;
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+    );
+});
+</script>
+{% endblock %}

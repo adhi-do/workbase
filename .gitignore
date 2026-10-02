@@ -4,6 +4,7 @@
 # Database — contains real user data, regenerated automatically on first run
 *.db
 *.sqlite3
+./WORKBASE_STEPS.yaml
 
 # Python
 __pycache__/

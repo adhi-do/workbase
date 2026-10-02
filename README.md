@@ -1,109 +1,137 @@
-# Campus Attendance
+# Workbase — Unified Digital Operations Platform
 
-A small website where an admin sets a campus/office location, and students can mark
-their attendance only when their device's location is inside the allowed radius.
+**Workbase** is a unified digital operations platform built to eliminate proxy attendance via secure, server-side GPS verification while laying an expandable foundation for enterprise resource and task management.
 
-## 1. Install
+Built purely with **Python (Flask)**, **SQLite**, and **standard semantic HTML5 / Modern CSS / Vanilla JavaScript** — strictly free of React, Tailwind, or Java.
+
+---
+
+## MVP Core Capabilities
+
+1. **Anti-Proxy Geofenced Attendance Verification**
+   - Students check in using device GPS coordinates captured via HTML5 Geolocation API.
+   - Coordinates are calculated server-side using the Haversine great-circle distance against active campus boundary pins.
+   - GPS accuracy ceiling prevents spoofing via wide accuracy tolerances (forgiving up to 50m of natural jitter, but rejecting low-precision spoofed signals).
+   - Multi-campus pin support automatically checks in students against the nearest active perimeter.
+   - Strict daily uniqueness constraint (`UNIQUE(user_id, marked_date)`) prevents duplicate check-ins.
+
+2. **Executive Administrative Console**
+   - Manage campus boundary pins (name, latitude, longitude, permitted radius bounds 5m–5,000m, toggle active/inactive, or safe deletion).
+   - Real-time audit log of all check-ins with exact timestamp, student identity, calculated distance, and verification mode.
+   - **Compliance & Defaulter Auditing (< 70%):**
+     - Automatically aggregates institutional attendance rates.
+     - Live interactive filtering to isolate defaulters falling below the mandatory 70% threshold.
+     - One-click CSV exports: `workbase_defaulters_below_70.csv` and `workbase_attendance_full_log.csv`.
+
+3. **Built-in Error Reporting & Dispute Ticketing**
+   - Dedicated dispute workflow for indoor signal attenuation, concrete barrier interference, or browser sensor drift.
+   - Captures issue categories (`gps_failure`, `inaccurate_location`, `device_error`, `other`), physical room location, and optional coordinate evidence.
+   - Administrators audit tickets and can **Approve & Credit Attendance** retroactively to the student's record under the `ticket_approval` ledger.
+
+4. **Extensible Foundation: Task Allocation & Resource Management**
+   - **Task Module:** Assign operational workflows and duty delegations with priority ratings (`low`, `medium`, `high`, `urgent`), deadlines, and lifecycle transitions (`todo` → `in_progress` → `completed`).
+   - **Resource Module:** Register, track, book, and return institutional facilities, laboratories, and physical hardware.
+
+---
+
+## Directory Architecture
+
+```text
+workbase/
+├── app.py                  # Application factory, security headers, error handlers, and blueprint registration
+├── auth.py                 # Core cryptographic hashing (PBKDF2-HMAC-SHA256) & RBAC decorators
+├── database.py             # SQLite schema, connection management, migrations, and analytics queries
+├── geo.py                  # Haversine distance calculations and WGS84 coordinate boundary validation
+├── create_admin.py         # Secure CLI utility for provisioning admin accounts (interactive or flag-based)
+├── blueprints/             # Modular routing ready to scale
+│   ├── __init__.py
+│   ├── auth.py             # Authentication endpoints (/login, /register, /logout)
+│   ├── attendance.py       # Core attendance check-in & student portal (/dashboard, /mark-attendance)
+│   ├── admin.py            # Administrative controls, campus pins, and <70% defaulter filtering (/admin)
+│   ├── tickets.py          # Built-in issue ticketing & dispute resolution (/tickets, /admin/tickets)
+│   ├── tasks.py            # Operational task allocation (/tasks)
+│   └── resources.py        # Institutional resource management (/resources)
+├── static/
+│   └── style.css           # Modern, responsive CSS design (zero Tailwind, zero frameworks)
+├── templates/              # Clean semantic HTML templates
+│   ├── base.html           # Unified navigation, flash messages, role-based controls
+│   ├── login.html          # Authentication form
+│   ├── register.html       # Student self-registration form
+│   ├── student_dashboard.html # Attendance action, 70% progress meter, history, tasks
+│   ├── admin_dashboard.html   # Campus pins, defaulter filtering, real-time logs
+│   ├── tickets.html        # Student dispute ticketing
+│   ├── admin_tickets.html  # Admin dispute auditing and attendance crediting
+│   ├── tasks.html          # Task allocation and status management
+│   └── resources.html      # Asset catalog and reservation system
+├── tests/
+│   └── test_workbase.py    # Comprehensive automated test suite (21 unit & integration tests)
+├── .env.example            # Environment configuration template
+├── Procfile                # WSGI deployment configuration (gunicorn app:app)
+└── requirements.txt        # Production dependencies
+```
+
+---
+
+## Quickstart Guide
+
+### 1. Environment Setup
 
 ```bash
-cd campus-attendance
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate    # On Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-## 2. Configure
+### 2. Configure Environment
 
+Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
-python -c "import secrets; print(secrets.token_hex(32))"
+```
+Generate and set a random 64-character secret key:
+```bash
+python3 -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))" >> .env
+echo "FLASK_ENV=development" >> .env
 ```
 
-Paste the printed value into `.env` as `SECRET_KEY=...`.
+### 3. Create Administrator Account
 
-## 3. Create the admin account
+Administrators can **only** be created from the CLI to eliminate browser privilege escalation:
 
-Admins are never created through the website — only from the terminal, so no one
-can sign up as an admin from the browser.
+**Interactive prompt:**
+```bash
+python3 create_admin.py
+```
+
+**Or automated flag-based setup:**
+```bash
+python3 create_admin.py --username admin --email admin@workbase.io --password MySecurePassword123
+```
+
+### 4. Run Automated Test Suite
+
+Verify all 21 unit and integration tests across auth, GPS verification, RBAC, defaulter calculations, and ticketing:
 
 ```bash
-python create_admin.py
+python3 -m unittest discover -s tests
 ```
 
-Follow the prompts to set an admin username, email, and password.
-
-## 4. Run the app
+### 5. Launch the Application
 
 ```bash
-python app.py
+python3 app.py
 ```
 
-Visit **http://127.0.0.1:5000**. The database file `attendance.db` is created
-automatically on first run.
+Access the application in your browser at **http://127.0.0.1:5000**.
 
-## 5. Using the site
+---
 
-**As admin:**
-1. Log in with the account you created in step 3.
-2. On the admin dashboard, click "Use My Current Location" (while standing on
-   campus) or type the latitude/longitude manually, set a radius in meters, and
-   save. Save a new location any time to update it — the most recent one is
-   always what students are checked against.
-3. Scroll down to see how many students have checked in today and the recent
-   check-in list.
+## Production Security Notes
 
-**As a student:**
-1. Go to `/register` and create an account.
-2. Log in, and on the dashboard click "Mark My Presence".
-3. Your browser will ask for location permission — allow it. The server checks
-   your coordinates against the campus location and only accepts the check-in
-   if you're within the allowed radius. Each student can mark attendance once
-   per day.
-
-## Notes
-
-- Browser geolocation requires **HTTPS** in production (it works over plain
-  HTTP only on `localhost` for local testing).
-- Set `FLASK_ENV=production` in `.env` before deploying so debug mode is off
-  and session cookies are marked secure (HTTPS-only).
-- Put the app behind a real web server (e.g. gunicorn + nginx) for production
-  use — `python app.py` runs Flask's built-in dev server, which isn't meant
-  for production traffic.
-
-## 6. Deploying to a hosting platform
-
-The app already includes a `Procfile` (`web: gunicorn app:app`) that most
-platforms recognize automatically.
-
-**General steps, on any platform (Render, Railway, PythonAnywhere, Fly.io, etc.):**
-
-1. Push this project to a GitHub repo. `.gitignore` already excludes `.env`
-   and `attendance.db` — don't remove those lines.
-2. Create a new "Web Service" / "App" on the platform and connect your repo.
-3. Set the **build command** to `pip install -r requirements.txt` (most
-   platforms detect this automatically from `requirements.txt`).
-4. Set the **start command** to `gunicorn app:app` (or let the platform read
-   the `Procfile`).
-5. In the platform's dashboard, add an **environment variable**:
-   - `SECRET_KEY` = the random value you generated with
-     `python -c "import secrets; print(secrets.token_hex(32))"`
-   - `FLASK_ENV` = `production`
-
-   This is what replaces `.env` in production — the platform injects these
-   into the app's environment at runtime; `load_dotenv()` in `app.py` is a
-   no-op if there's no `.env` file, so this works without any code changes.
-6. Deploy. Visit the platform's HTTPS URL (not localhost) — geolocation
-   requires HTTPS, and the platform provides that automatically.
-7. Open a **shell/console** on the platform (most give you one — Render and
-   Railway both do) and run `python create_admin.py` once to create your
-   admin account directly on the deployed server.
-
-**Important: SQLite and ephemeral storage.** Many free-tier hosting plans
-wipe the filesystem on every redeploy or restart, which means `attendance.db`
-— and every account and attendance record in it — disappears. Before relying
-on this for real attendance tracking, do one of:
-- Pay for a plan with a **persistent disk/volume** (Render, Railway, and
-  Fly.io all offer this) and set `DB_PATH` to a path on that disk, or
-- Migrate to a managed database (e.g. Postgres) for production use — this
-  app is intentionally small so that swap is straightforward, but it's not
-  included here.
+* **HTTPS Enforcement:** The HTML5 Geolocation API requires a secure HTTPS origin in production (modern browsers restrict GPS on plain HTTP outside `localhost`).
+* **Session Cookies:** Set `FLASK_ENV=production` in production. This activates `SESSION_COOKIE_SECURE=True` (HTTPS-only) alongside `HTTPOnly` and `SameSite=Lax`.
+* **CSRF Protection:** Every state-changing form and AJAX request is cryptographically verified via Flask-WTF tokens.
+* **Tamper-Resistant GPS:** Client clocks and spoofed accuracy numbers are mitigated server-side: accuracy tolerance is capped at 50m, coordinate boundaries are validated, and distances are computed server-side via Haversine geometry.

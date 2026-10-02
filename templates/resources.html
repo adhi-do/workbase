@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Institutional Resource Tracking — Workbase{% endblock %}
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <h1 class="page-title">Institutional Resource Management</h1>
+        <p class="muted">Track, allocate, and audit campus facilities, laboratory spaces, and critical physical assets.</p>
+    </div>
+</div>
+
+<div class="grid-two-col mb-4">
+    <!-- Resource Registration (Admin Only) or Booking Form (All Users) -->
+    {% if is_admin %}
+    <div class="card">
+        <div class="card-header-clean">
+            <h2>Register Institutional Asset</h2>
+            <p class="muted small-text">Enroll physical facilities, laboratory stations, and specialized hardware.</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('resources.create_resource') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="form-group">
+                <label for="name">Resource Name / Identifier</label>
+                <input type="text" id="name" name="name" placeholder="e.g. Physics Lab Station 04, Conference Room B" required>
+            </div>
+
+            <div class="form-row-2">
+                <div class="form-group">
+                    <label for="category">Category</label>
+                    <select id="category" name="category">
+                        {% for cat in categories %}
+                            <option value="{{ cat }}">{{ cat|capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="campus_id">Campus Location</label>
+                    <select id="campus_id" name="campus_id">
+                        <option value="">-- Unassigned / General --</option>
+                        {% for c in campuses %}
+                            <option value="{{ c['id'] }}">{{ c['name'] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="notes">Specifications &amp; Access Notes</label>
+                <textarea id="notes" name="notes" rows="2" placeholder="Capacity, technical requirements, or access keys..."></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Register Asset</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Resource Allocation / Booking Form -->
+    <div class="card">
+        <div class="card-header-clean">
+            <h2>Reserve / Check Out Asset</h2>
+            <p class="muted small-text">Secure temporary operational allocation for scheduled academic or institutional use.</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('resources.allocate_resource') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="form-group">
+                <label for="resource_id">Select Asset</label>
+                <select id="resource_id" name="resource_id" required>
+                    <option value="">-- Choose Available Asset --</option>
+                    {% for r in resources %}
+                        {% if r['status'] == 'available' %}
+                            <option value="{{ r['id'] }}">{{ r['name'] }} ({{ r['category']|capitalize }}{% if r['campus_name'] %} - {{ r['campus_name'] }}{% endif %})</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-row-2">
+                <div class="form-group">
+                    <label for="start_time">Start Window</label>
+                    <input type="datetime-local" id="start_time" name="start_time" required>
+                </div>
+                <div class="form-group">
+                    <label for="end_time">End Window</label>
+                    <input type="datetime-local" id="end_time" name="end_time" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="purpose">Operational Justification / Purpose</label>
+                <input type="text" id="purpose" name="purpose" placeholder="e.g. Capstone Research Experiment, Group Discussion" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Confirm Allocation</button>
+        </form>
+    </div>
+</div>
+
+<!-- Assets Inventory Table -->
+<div class="card mb-4">
+    <div class="card-header-clean">
+        <h2>Institutional Assets Inventory</h2>
+        <span class="muted small-text">{{ resources|length }} asset(s) on ledger</span>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Asset Identifier</th>
+                    <th>Category</th>
+                    <th>Campus Location</th>
+                    <th>Availability Status</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for r in resources %}
+                <tr>
+                    <td class="font-weight-medium">{{ r['name'] }}</td>
+                    <td><span class="badge badge-neutral">{{ r['category']|capitalize }}</span></td>
+                    <td class="muted">{{ r['campus_name'] or 'General Campus' }}</td>
+                    <td>
+                        <span class="badge badge-{{ 'success' if r['status'] == 'available' else ('warning' if r['status'] == 'in_use' else 'danger') }}">
+                            {{ r['status']|replace('_', ' ')|capitalize }}
+                        </span>
+                    </td>
+                    <td class="small-text muted">{{ r['notes'] or 'None' }}</td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="5" class="text-center muted py-4">No institutional resources cataloged yet.</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Active Allocations Log -->
+<div class="card">
+    <div class="card-header-clean">
+        <h2>Active Allocations &amp; Check-Out Log</h2>
+        <span class="muted small-text">Recent audit history</span>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Asset</th>
+                    <th>Allocated To</th>
+                    <th>Time Window</th>
+                    <th>Purpose</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for a in allocations %}
+                <tr>
+                    <td class="font-weight-medium">{{ a['resource_name'] }}</td>
+                    <td>{{ a['username'] }}</td>
+                    <td class="small-text muted">{{ a['start_time']|replace('T', ' ') }} → {{ a['end_time']|replace('T', ' ') }}</td>
+                    <td class="small-text">{{ a['purpose'] }}</td>
+                    <td>
+                        <span class="badge badge-{{ 'success' if a['status'] == 'returned' else ('warning' if a['status'] == 'active' else 'neutral') }}">
+                            {{ a['status']|capitalize }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if a['status'] == 'active' and (is_admin or a['user_id'] == session.get('user_id')) %}
+                            <form method="POST" action="{{ url_for('resources.return_resource', allocation_id=a['id']) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-secondary btn-xs">Mark Returned</button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="6" class="text-center muted py-4">No active resource allocations recorded.</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

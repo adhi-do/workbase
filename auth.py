@@ -30,7 +30,7 @@ def login_required(view):
     def wrapped(*args, **kwargs):
         if "user_id" not in session:
             flash("Please log in to continue.", "error")
-            return redirect(url_for("login"))
+            return redirect(url_for("auth.login"))
         return view(*args, **kwargs)
     return wrapped
 
@@ -40,7 +40,7 @@ def admin_required(view):
     def wrapped(*args, **kwargs):
         if "user_id" not in session:
             flash("Please log in to continue.", "error")
-            return redirect(url_for("login"))
+            return redirect(url_for("auth.login"))
         if session.get("role") != "admin":
             abort(403)
         return view(*args, **kwargs)

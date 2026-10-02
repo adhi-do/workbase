@@ -3,30 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Campus Attendance{% endblock %}</title>
+    <title>{% block title %}Workbase Operations Platform{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <nav class="navbar">
-        <span class="brand">📍 Campus Attendance</span>
-        {% if session.get('user_id') %}
-            <span class="nav-user">{{ session.get('username') }} ({{ session.get('role') }})</span>
-            <a href="{{ url_for('logout') }}" class="nav-link">Logout</a>
-        {% endif %}
-    </nav>
+    <header class="navbar">
+        <div class="nav-container">
+            <a href="{{ url_for('attendance.index') }}" class="brand">
+                <span class="brand-icon">⬢</span> Workbase
+            </a>
+            
+            {% if session.get('user_id') %}
+                <nav class="nav-links">
+                    {% if session.get('role') == 'admin' %}
+                        <a href="{{ url_for('admin.admin_dashboard') }}" class="nav-item">Dashboard</a>
+                        <a href="{{ url_for('tickets.admin_tickets') }}" class="nav-item">Issue Tickets</a>
+                        <a href="{{ url_for('tasks.index') }}" class="nav-item">Tasks</a>
+                        <a href="{{ url_for('resources.index') }}" class="nav-item">Resources</a>
+                    {% else %}
+                        <a href="{{ url_for('attendance.student_dashboard') }}" class="nav-item">Attendance</a>
+                        <a href="{{ url_for('tickets.student_tickets') }}" class="nav-item">Report Issue</a>
+                        <a href="{{ url_for('tasks.index') }}" class="nav-item">Tasks</a>
+                        <a href="{{ url_for('resources.index') }}" class="nav-item">Resources</a>
+                    {% endif %}
+                </nav>
 
-    <main class="container">
+                <div class="nav-user-actions">
+                    <span class="user-badge {{ session.get('role') }}">
+                        <span class="dot"></span>
+                        {{ session.get('username') }} ({{ session.get('role')|capitalize }})
+                    </span>
+                    <a href="{{ url_for('auth.logout') }}" class="btn-logout">Logout</a>
+                </div>
+            {% else %}
+                <nav class="nav-links guest">
+                    <a href="{{ url_for('auth.login') }}" class="nav-item">Log In</a>
+                    <a href="{{ url_for('auth.register') }}" class="nav-item btn-nav-cta">Register</a>
+                </nav>
+            {% endif %}
+        </div>
+    </header>
+
+    <main class="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                <div class="flash-wrap">
+                <div class="flash-stack">
                     {% for category, message in messages %}
-                        <div class="flash flash-{{ category }}">{{ message }}</div>
+                        <div class="flash flash-{{ category }}">
+                            <span class="flash-symbol">
+                                {% if category == 'success' %}✓{% elif category == 'error' %}⚠{% else %}ℹ{% endif %}
+                            </span>
+                            <span class="flash-text">{{ message }}</span>
+                        </div>
                     {% endfor %}
                 </div>
             {% endif %}
         {% endwith %}
 
-        {% block content %}{% endblock %}
+        {% if error_title %}
+            <div class="card error-card">
+                <h1>{{ error_title }}</h1>
+                <p class="muted">{{ error_message }}</p>
+                <p><a href="{{ url_for('attendance.index') }}" class="btn btn-primary">Return to Homepage</a></p>
+            </div>
+        {% else %}
+            {% block content %}{% endblock %}
+        {% endif %}
     </main>
+
+    <footer class="footer">
+        <p>&copy; Workbase Digital Operations &amp; Resource Management. Built for secure, tamper-free attendance verification.</p>
+    </footer>
 </body>
 </html>

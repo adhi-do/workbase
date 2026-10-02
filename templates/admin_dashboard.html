@@ -1,97 +1,402 @@
 {% extends "base.html" %}
-{% block title %}Admin Dashboard{% endblock %}
+{% block title %}Admin Operations Console — Workbase{% endblock %}
 {% block content %}
-<div class="card">
-    <h1>Set Campus Location</h1>
-    <p class="muted">The most recently saved location is the one students are checked against.</p>
-    <form method="POST" id="campus-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Campus / Office Name
-            <input type="text" name="name" placeholder="Main Campus">
-        </label>
-        <label>Latitude
-            <input type="number" step="any" name="latitude" id="latitude" required>
-        </label>
-        <label>Longitude
-            <input type="number" step="any" name="longitude" id="longitude" required>
-        </label>
-        <label>Allowed Radius (meters)
-            <input type="number" step="any" name="radius" value="150" min="5" max="5000" required>
-        </label>
-        <button type="button" id="use-current-location">Use My Current Location</button>
-        <button type="submit">Save Campus Location</button>
-    </form>
-    <p id="geo-status" class="muted"></p>
+<div class="dashboard-header">
+    <div>
+        <h1 class="page-title">Executive Operations Console</h1>
+        <p class="muted">Monitor institutional attendance integrity, geofence parameters, and student compliance.</p>
+    </div>
+    <div class="header-action">
+        <a href="{{ url_for('admin.export_attendance') }}" class="btn btn-secondary btn-sm">Export Full Log (CSV)</a>
+        <a href="{{ url_for('admin.export_defaulters') }}" class="btn btn-danger btn-sm">Export Defaulters (&lt;70%)</a>
+    </div>
 </div>
 
-<div class="card">
-    <h2>Saved Locations</h2>
-    <table>
-        <thead><tr><th>Name</th><th>Latitude</th><th>Longitude</th><th>Radius (m)</th><th>Created</th><th></th></tr></thead>
-        <tbody>
-        {% for c in campuses %}
-            <tr>
-                <td>{{ c['name'] }}</td>
-                <td>{{ '%.6f' % c['latitude'] }}</td>
-                <td>{{ '%.6f' % c['longitude'] }}</td>
-                <td>{{ c['radius_meters'] }}</td>
-                <td>{{ c['created_at'] }}</td>
-                <td><a href="https://www.google.com/maps?q={{ c['latitude'] }},{{ c['longitude'] }}" target="_blank" rel="noopener">View on map ↗</a></td>
-            </tr>
-        {% else %}
-            <tr><td colspan="6">No campus location set yet.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<!-- Key Performance Metrics Grid -->
+<div class="metrics-grid mb-4">
+    <div class="metric-card">
+        <div class="metric-header">
+            <span class="metric-title">Today's Check-Ins</span>
+            <span class="metric-icon">📍</span>
+        </div>
+        <div class="metric-num">{{ today_count }}</div>
+        <span class="metric-desc">Verified present today</span>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-header">
+            <span class="metric-title">Total Enrolled Students</span>
+            <span class="metric-icon">👥</span>
+        </div>
+        <div class="metric-num">{{ summary.total_students }}</div>
+        <span class="metric-desc">{{ summary.total_system_days }} institutional tracking days</span>
+    </div>
+
+    <div class="metric-card alert-border">
+        <div class="metric-header">
+            <span class="metric-title">Defaulters (&lt; 70%)</span>
+            <span class="metric-icon">⚠️</span>
+        </div>
+        <div class="metric-num text-danger">{{ summary.defaulters_count }}</div>
+        <span class="metric-desc">Students below compliance threshold</span>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-header">
+            <span class="metric-title">Pending Issue Tickets</span>
+            <span class="metric-icon">🎫</span>
+        </div>
+        <div class="metric-num">{{ pending_tickets_count }}</div>
+        <span class="metric-desc"><a href="{{ url_for('tickets.admin_tickets') }}" class="small-link">Review submissions ↗</a></span>
+    </div>
 </div>
 
-<div class="card">
-    <h2>Today's Attendance Count: {{ today_count }}</h2>
-    <h3>Recent Check-ins</h3>
-    <table>
-        <thead><tr><th>Student</th><th>Time</th><th>Distance (m)</th></tr></thead>
-        <tbody>
-        {% for r in recent %}
-            <tr>
-                <td>{{ r['username'] }}</td>
-                <td>{{ r['marked_at'] }}</td>
-                <td>{{ '%.1f' % r['distance_meters'] }}</td>
-            </tr>
-        {% else %}
-            <tr><td colspan="3">No attendance records yet.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<!-- Section: Student Attendance & Defaulter (<70%) Filtering -->
+<div class="card mb-4" id="defaulters-section">
+    <div class="card-header-flex">
+        <div>
+            <h2>Student Attendance Compliance &amp; Defaulter Analysis</h2>
+            <p class="muted small-text">Instantly audit and isolate individuals whose attendance rate falls below the mandatory 70% threshold.</p>
+        </div>
+        <div class="filter-toolbar">
+            <div class="filter-btn-group" id="filter-buttons">
+                <button type="button" class="btn btn-filter active" data-filter="all">
+                    All Students ({{ summary.total_students }})
+                </button>
+                <button type="button" class="btn btn-filter btn-filter-danger" data-filter="defaulters">
+                    ⚠️ Defaulters (&lt; 70%) ({{ summary.defaulters_count }})
+                </button>
+                <button type="button" class="btn btn-filter" data-filter="compliant">
+                    ✓ Compliant (≥ 70%) ({{ summary.good_standing_count }})
+                </button>
+            </div>
+            <input type="text" id="student-search" placeholder="Search student by name or email..." class="search-input">
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table id="students-table">
+            <thead>
+                <tr>
+                    <th>Student Name</th>
+                    <th>Email Address</th>
+                    <th>Attended Days</th>
+                    <th>Institutional Days</th>
+                    <th>Attendance Rate</th>
+                    <th>Compliance Status</th>
+                    <th>Last Active</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for s in summary.students %}
+                <tr class="student-row" data-defaulter="{{ 'true' if s.is_defaulter else 'false' }}">
+                    <td class="font-weight-medium">{{ s.username }}</td>
+                    <td class="muted">{{ s.email }}</td>
+                    <td><strong>{{ s.attended_days }}</strong></td>
+                    <td class="muted">{{ s.total_days }}</td>
+                    <td>
+                        <div class="rate-bar-container">
+                            <span class="rate-text font-weight-bold">{{ s.percentage }}%</span>
+                            <div class="mini-progress">
+                                <div class="mini-bar {% if s.is_defaulter %}bg-danger{% else %}bg-success{% endif %}" style="width: {{ s.percentage }}%;"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        {% if s.is_defaulter %}
+                            <span class="badge badge-danger">⚠️ Defaulter (&lt; 70%)</span>
+                        {% else %}
+                            <span class="badge badge-success">✓ Good Standing</span>
+                        {% endif %}
+                    </td>
+                    <td class="muted small-text">{{ s.last_check_in or 'Never' }}</td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="7" class="text-center muted py-4">No student records registered in the system yet.</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
+
+<!-- Section: Campus Pins Management -->
+<div class="grid-two-col mb-4">
+    <!-- Form: Set / Add Campus Location -->
+    <div class="card">
+        <div class="card-header-clean">
+            <h2>Add Campus Geofence Pin</h2>
+            <p class="muted small-text">Define perimeter bounds against which student browser GPS fixes are verified.</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('admin.admin_dashboard') }}" id="campus-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="name">Campus / Office / Branch Name</label>
+                <input type="text" id="name" name="name" placeholder="e.g. Main Campus, Tech Block, Library" required>
+            </div>
+            
+            <div class="form-row-2">
+                <div class="form-group">
+                    <label for="latitude">Latitude</label>
+                    <input type="number" step="any" id="latitude" name="latitude" placeholder="e.g. 12.971598" required>
+                </div>
+                <div class="form-group">
+                    <label for="longitude">Longitude</label>
+                    <input type="number" step="any" id="longitude" name="longitude" placeholder="e.g. 77.594562" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="radius">Permitted Radius Boundary (meters)</label>
+                <input type="number" step="any" id="radius" name="radius" value="150" min="5" max="5000" required>
+                <span class="field-hint">Range: 5 to 5,000 meters. Typical campus building: 100-250m.</span>
+            </div>
+
+            <div class="form-actions-split">
+                <button type="button" id="use-current-location" class="btn btn-secondary">
+                    📡 Use My Current Position
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    Save Campus Pin
+                </button>
+            </div>
+        </form>
+        <p id="geo-status" class="muted small-text mt-2"></p>
+    </div>
+
+    <!-- Active Campus Locations List -->
+    <div class="card">
+        <div class="card-header-clean">
+            <h2>Active Campus Pins</h2>
+            <span class="muted small-text">{{ campuses|length }} perimeter(s) configured</span>
+        </div>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Pin Name</th>
+                        <th>Coordinates</th>
+                        <th>Radius</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for c in campuses %}
+                    <tr>
+                        <td class="font-weight-medium">{{ c['name'] }}</td>
+                        <td class="small-text muted">{{ '%.4f' % c['latitude'] }}, {{ '%.4f' % c['longitude'] }}</td>
+                        <td>{{ c['radius_meters']|int }}m</td>
+                        <td>
+                            {% if c['is_active'] %}
+                                <span class="badge badge-success">Active</span>
+                            {% else %}
+                                <span class="badge badge-neutral">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="action-btn-row">
+                                <a href="https://www.google.com/maps?q={{ c['latitude'] }},{{ c['longitude'] }}" target="_blank" rel="noopener" class="btn-link-action" title="View on Google Maps">Maps ↗</a>
+                                <form method="POST" action="{{ url_for('admin.toggle_campus', campus_id=c['id']) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn-link-action">
+                                        {{ 'Disable' if c['is_active'] else 'Enable' }}
+                                    </button>
+                                </form>
+                                <form method="POST" action="{{ url_for('admin.delete_campus', campus_id=c['id']) }}" class="d-inline" onsubmit="return confirm('Are you sure you want to remove this campus pin?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn-link-action text-danger">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center muted py-3">No campus boundaries configured yet.</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Section: Real-Time Audit Log -->
+<div class="card mb-4">
+    <div class="card-header-flex">
+        <div>
+            <h2>Real-Time Attendance Audit Log</h2>
+            <p class="muted small-text">Live check-in stream verified through cryptographic server bounds.</p>
+        </div>
+        <a href="{{ url_for('admin.export_attendance') }}" class="small-link">Download Full History ↗</a>
+    </div>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Student</th>
+                    <th>Campus Pin</th>
+                    <th>Calculated Distance</th>
+                    <th>Verification Mode</th>
+                    <th>Coordinates</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for r in recent_logs %}
+                <tr>
+                    <td>{{ r['marked_at'] }}</td>
+                    <td class="font-weight-medium">
+                        {{ r['username'] }}
+                        <span class="muted small-text d-block">{{ r['email'] }}</span>
+                    </td>
+                    <td>{{ r['campus_name'] or 'Campus Pin' }}</td>
+                    <td>{{ '%.1f' % r['distance_meters'] }} meters</td>
+                    <td>
+                        {% if r['method'] == 'ticket_approval' %}
+                            <span class="badge badge-info">Dispute Credit</span>
+                        {% else %}
+                            <span class="badge badge-success">GPS Verification</span>
+                        {% endif %}
+                    </td>
+                    <td class="small-text muted">
+                        <a href="https://www.google.com/maps?q={{ r['latitude'] }},{{ r['longitude'] }}" target="_blank" rel="noopener" class="small-link">
+                            {{ '%.4f' % r['latitude'] }}, {{ '%.4f' % r['longitude'] }} ↗
+                        </a>
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="6" class="text-center muted py-4">No attendance check-ins recorded yet.</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Section: Open Dispute Tickets Quick Review -->
+{% if pending_tickets %}
+<div class="card">
+    <div class="card-header-flex">
+        <div>
+            <h2>Pending GPS &amp; Location Dispute Tickets</h2>
+            <p class="muted small-text">Immediate student issues awaiting administrative action.</p>
+        </div>
+        <a href="{{ url_for('tickets.admin_tickets') }}" class="btn btn-secondary btn-sm">Open All Tickets ({{ pending_tickets_count }})</a>
+    </div>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Student</th>
+                    <th>Issue Category</th>
+                    <th>Description</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for t in pending_tickets %}
+                <tr>
+                    <td>{{ t['ticket_date'] }}</td>
+                    <td class="font-weight-medium">{{ t['username'] }}</td>
+                    <td><span class="badge badge-warning">{{ t['issue_type']|replace('_', ' ')|capitalize }}</span></td>
+                    <td class="small-text">{{ t['description'] }}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('tickets.update_ticket_status', ticket_id=t['id']) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="approve">
+                            <input type="hidden" name="admin_notes" value="Approved via fast review console">
+                            <button type="submit" class="btn btn-success btn-xs">Approve &amp; Credit</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('tickets.update_ticket_status', ticket_id=t['id']) }}" class="d-inline ml-1">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="reject">
+                            <input type="hidden" name="admin_notes" value="Insufficient justification">
+                            <button type="submit" class="btn btn-danger btn-xs">Reject</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
 
 <script>
+// Geolocation capture for admin pin setup
 document.getElementById('use-current-location').addEventListener('click', () => {
     const status = document.getElementById('geo-status');
     if (!navigator.geolocation) {
-        status.innerText = 'Geolocation is not supported by this browser.';
+        status.innerText = 'Geolocation is not supported by your browser.';
         return;
     }
-    status.innerText = 'Locating...';
+    status.innerText = 'Acquiring satellite coordinate lock...';
     navigator.geolocation.getCurrentPosition(
         (position) => {
-            document.getElementById('latitude').value = position.coords.latitude;
-            document.getElementById('longitude').value = position.coords.longitude;
-            const acc = Math.round(position.coords.accuracy);
-            let warning = '';
+            document.getElementById('latitude').value = position.coords.latitude.toFixed(6);
+            document.getElementById('longitude').value = position.coords.longitude.toFixed(6);
+            const acc = Math.round(position.coords.accuracy || 0);
+            let note = '';
             if (acc > 100) {
-                warning = ' ⚠️ This accuracy is poor — likely a WiFi/IP-based estimate, ' +
-                          'not real GPS. Try this from a phone outdoors with location ' +
-                          'services (not just WiFi) turned on before saving.';
+                note = ' ⚠️ Warning: Reported accuracy is broad (±' + acc + 'm). For high precision, verify outdoors with GPS enabled.';
+            } else {
+                note = ' ✓ Coordinate locked (accuracy ±' + acc + 'm).';
             }
-            status.innerText = `Location filled in (accuracy: ±${acc}m).${warning} ` +
-                                'Review and save.';
+            status.innerText = note;
         },
         (error) => {
-            status.innerText = 'Could not get location: ' + error.message;
+            status.innerText = 'Could not acquire position: ' + error.message;
         },
         { enableHighAccuracy: true, timeout: 10000 }
     );
 });
+
+// Real-time Defaulter (<70%) and Student Search Filtering
+const filterButtons = document.querySelectorAll('#filter-buttons .btn-filter');
+const searchInput = document.getElementById('student-search');
+const studentRows = document.querySelectorAll('.student-row');
+
+let currentFilter = 'all';
+
+function applyFilters() {
+    const searchTerm = searchInput.value.toLowerCase().trim();
+
+    studentRows.forEach(row => {
+        const isDefaulter = row.getAttribute('data-defaulter') === 'true';
+        const textContent = row.textContent.toLowerCase();
+
+        const matchesSearch = textContent.includes(searchTerm);
+        let matchesFilter = true;
+
+        if (currentFilter === 'defaulters') {
+            matchesFilter = isDefaulter;
+        } else if (currentFilter === 'compliant') {
+            matchesFilter = !isDefaulter;
+        }
+
+        if (matchesSearch && matchesFilter) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+filterButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+        filterButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.getAttribute('data-filter');
+        applyFilters();
+    });
+});
+
+searchInput.addEventListener('input', applyFilters);
 </script>
 {% endblock %}
-

@@ -1,18 +1,31 @@
 {% extends "base.html" %}
-{% block title %}Log In{% endblock %}
+{% block title %}Log In — Workbase{% endblock %}
 {% block content %}
-<div class="card">
-    <h1>Log In</h1>
-    <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Username
-            <input type="text" name="username" required autofocus>
-        </label>
-        <label>Password
-            <input type="password" name="password" required>
-        </label>
-        <button type="submit">Log In</button>
-    </form>
-    <p class="muted">No account? <a href="{{ url_for('register') }}">Register here</a></p>
+<div class="auth-wrapper">
+    <div class="card auth-card">
+        <div class="auth-header">
+            <span class="auth-logo">⬢</span>
+            <h1>Sign in to Workbase</h1>
+            <p class="muted">Access secure GPS attendance, issue tracking, and operational tasks.</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('auth.login') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" placeholder="Enter your username" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+        </form>
+
+        <div class="auth-footer">
+            <p class="muted">Need a student account? <a href="{{ url_for('auth.register') }}">Create an account</a></p>
+            <p class="muted small-text">Administrative accounts are provisioned via server CLI.</p>
+        </div>
+    </div>
 </div>
 {% endblock %}
